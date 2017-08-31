@@ -6,17 +6,14 @@ import (
 	"fmt"
 	"errors"
 	"github.com/tobyjsullivan/btc-frogger/coinbase"
+	"os"
 )
 
 const (
-	TICK_DURATION = 10 * time.Minute
+	TICK_DURATION = 2 * time.Second
 
 	COINBASE_FEE = 0.003
 	COINBASE_MIN_TRADE = int64(0.01 * float64(AMOUNT_COIN))
-
-	CURRENCY_ETH = Currency("ETH")
-	CURRENCY_BTC = Currency("BTC")
-	CURRENCY_LTC = Currency("LTC")
 
 	AMOUNT_SATOSHI = 1
 	AMOUNT_COIN = 100000000 * AMOUNT_SATOSHI
@@ -26,25 +23,24 @@ const (
 )
 
 var (
+	coinbaseAccessKey = os.Getenv("COINBASE_API_ACCESS_KEY")
+	coinbaseSecretKey = os.Getenv("COINBASE_API_SECRET_KEY")
+	coinbasePassphrase = os.Getenv("COINBASE_API_PASSPHRASE")
+
 	sim *simulation
 )
 
 func init() {
 	sim = &simulation{
-		balances: make(map[Currency]int64),
+		balances: make(map[coinbase.Currency]int64),
 	}
-	sim.balances[CURRENCY_BTC] = 32281620
-	sim.balances[CURRENCY_ETH] = 399644680
-	sim.balances[CURRENCY_LTC] = 2260356890
 }
-
-type Currency string
 
 type simulation struct {
-	balances map[Currency]int64
+	balances map[coinbase.Currency]int64
 }
 
-func (s *simulation) transfer(from Currency, to Currency, amount int64) error {
+func (s *simulation) transfer(from, to coinbase.Currency, amount int64) error {
 	fromRate, err := currentRate(from)
 	if err != nil {
 		return err
@@ -68,19 +64,38 @@ func main() {
 
 	log.Println("Logger initialized.")
 
+	// Attempting a signed request for accounts
+	conn := coinbase.Conn{
+		Requester: &coinbase.SignedRequester{
+			ApiAccessKey: coinbaseAccessKey,
+			ApiSecretKey: coinbaseSecretKey,
+			ApiPassphrase: coinbasePassphrase,
+		},
+	}
+
+	accounts, err := conn.GetAccounts()
+	if err != nil {
+		log.Fatalln("getAccounts:", err)
+	}
+
+	for _, acct := range accounts {
+		log.Println("Account:", acct.ID, string(acct.Currency), acct.Balance)
+		sim.balances[acct.Currency] = acct.Balance
+	}
+
 	// Run the cycle every tick
 	ticker := time.NewTicker(TICK_DURATION)
 	for range ticker.C {
 		// Check balance
-		btcBalance, err := currentBalance(CURRENCY_BTC)
+		btcBalance, err := currentBalance(coinbase.CURRENCY_BTC)
 		if err != nil {
 			log.Panicln(err)
 		}
-		ethBalance, err := currentBalance(CURRENCY_ETH)
+		ethBalance, err := currentBalance(coinbase.CURRENCY_ETH)
 		if err != nil {
 			log.Panicln(err)
 		}
-		ltcBalance, err := currentBalance(CURRENCY_LTC)
+		ltcBalance, err := currentBalance(coinbase.CURRENCY_LTC)
 		if err != nil {
 			log.Panicln(err)
 		}
@@ -108,17 +123,17 @@ func main() {
 		// NOTE: Since BTC is the intermediary currency, we never actually have to buy or sell it explicitly
 		// Sell any ETH or LTC first
 		if ethDiff < 0 {
-			sell(CURRENCY_ETH, 0-ethDiff)
+			sell(coinbase.CURRENCY_ETH, 0-ethDiff)
 		}
 		if ltcDiff < 0 {
-			sell(CURRENCY_LTC, 0-ltcDiff)
+			sell(coinbase.CURRENCY_LTC, 0-ltcDiff)
 		}
 		// Then buy any ETH or LTC
 		if ethDiff > 0 {
-			buy(CURRENCY_ETH, ethDiff)
+			buy(coinbase.CURRENCY_ETH, ethDiff)
 		}
 		if ltcDiff > 0 {
-			buy(CURRENCY_LTC, ltcDiff)
+			buy(coinbase.CURRENCY_LTC, ltcDiff)
 		}
 	}
 
@@ -131,7 +146,7 @@ func fmtAmount(amount int64) string {
 	return fmt.Sprintf("%.8f", float64(amount) / AMOUNT_COIN)
 }
 
-func sell(c Currency, amount int64) error {
+func sell(c coinbase.Currency, amount int64) error {
 	if amount < COINBASE_MIN_TRADE {
 		// Not an error. Just skip the trade
 		return nil
@@ -139,10 +154,10 @@ func sell(c Currency, amount int64) error {
 
 	// TODO Implement for real
 	switch c {
-	case CURRENCY_ETH:
-		sim.transfer(CURRENCY_ETH, CURRENCY_BTC, amount)
-	case CURRENCY_LTC:
-		sim.transfer(CURRENCY_LTC, CURRENCY_BTC, amount)
+	case coinbase.CURRENCY_ETH:
+		sim.transfer(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC, amount)
+	case coinbase.CURRENCY_LTC:
+		sim.transfer(coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC, amount)
 	default:
 		return errors.New("Unsupported currency.")
 	}
@@ -150,7 +165,7 @@ func sell(c Currency, amount int64) error {
 	return nil
 }
 
-func buy(c Currency, amount int64) error {
+func buy(c coinbase.Currency, amount int64) error {
 	if amount < COINBASE_MIN_TRADE {
 		// Not an error. Just skip the trade
 		return nil
@@ -158,10 +173,10 @@ func buy(c Currency, amount int64) error {
 
 	// TODO Implement for real
 	switch c {
-	case CURRENCY_ETH:
-		sim.transfer(CURRENCY_BTC, CURRENCY_ETH, amount)
-	case CURRENCY_LTC:
-		sim.transfer(CURRENCY_BTC, CURRENCY_LTC, amount)
+	case coinbase.CURRENCY_ETH:
+		sim.transfer(coinbase.CURRENCY_BTC, coinbase.CURRENCY_ETH, amount)
+	case coinbase.CURRENCY_LTC:
+		sim.transfer(coinbase.CURRENCY_BTC, coinbase.CURRENCY_LTC, amount)
 	default:
 		return errors.New("Unsupported currency.")
 	}
@@ -169,7 +184,7 @@ func buy(c Currency, amount int64) error {
 	return nil
 }
 
-func currentBalance(c Currency) (int64, error) {
+func currentBalance(c coinbase.Currency) (int64, error) {
 	amt, err := currentNativeBalance(c)
 	if err != nil {
 		log.Println("currentNativeBalance:", err)
@@ -183,11 +198,11 @@ func currentBalance(c Currency) (int64, error) {
 	return int64(float64(amt) * rate), nil
 }
 
-func currentRate(c Currency) (float64, error) {
+func currentRate(c coinbase.Currency) (float64, error) {
 	switch c {
-	case CURRENCY_BTC:
+	case coinbase.CURRENCY_BTC:
 		return 1.0, nil
-	case CURRENCY_ETH:
+	case coinbase.CURRENCY_ETH:
 		ticker, err := coinbase.CurrentTicker(coinbase.ProductID_ETH_BTC)
 		if err != nil {
 			log.Println("ticker:", err)
@@ -195,7 +210,7 @@ func currentRate(c Currency) (float64, error) {
 		}
 
 		return ticker.Price, nil
-	case CURRENCY_LTC:
+	case coinbase.CURRENCY_LTC:
 		ticker, err := coinbase.CurrentTicker(coinbase.ProductID_LTC_BTC)
 		if err != nil {
 			log.Println("ticker:", err)
@@ -208,7 +223,7 @@ func currentRate(c Currency) (float64, error) {
 	}
 }
 
-func currentNativeBalance(c Currency) (int64, error) {
+func currentNativeBalance(c coinbase.Currency) (int64, error) {
 	// TODO Implement for real
 	nativeBal, ok := sim.balances[c]
 	if !ok {

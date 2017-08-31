@@ -1,0 +1,12 @@
+{
+	"ImportPath": "github.com/tobyjsullivan/btc-frogger",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/satori/go.uuid",
+			"Comment": "v1.1.0-6-gb061729",
+			"Rev": "b061729afc07e77a8aa4fad0a2fd840958f1942a"
+		}
+	]
+}
