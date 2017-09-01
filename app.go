@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	TICK_DURATION = 2 * time.Second
+	TICK_DURATION = 10 * time.Minute
 
 	COINBASE_FEE = 0.003
 	COINBASE_MIN_TRADE = int64(0.01 * float64(AMOUNT_COIN))
@@ -27,35 +27,28 @@ var (
 	coinbaseSecretKey = os.Getenv("COINBASE_API_SECRET_KEY")
 	coinbasePassphrase = os.Getenv("COINBASE_API_PASSPHRASE")
 
-	sim *simulation
+	currentState *state
 )
 
 func init() {
-	sim = &simulation{
+	currentState = &state{
 		balances: make(map[coinbase.Currency]int64),
 	}
 }
 
-type simulation struct {
+type state struct {
 	balances map[coinbase.Currency]int64
 }
 
-func (s *simulation) transfer(conn *coinbase.Conn, from, to coinbase.Currency, amount int64) error {
-	fromRate, err := currentRate(conn, from)
+func updateBalances(conn *coinbase.Conn) {
+	accounts, err := conn.GetAccounts()
 	if err != nil {
-		return err
+		log.Fatalln("getAccounts:", err)
 	}
 
-	toRate, err := currentRate(conn, to)
-	if err != nil {
-		return err
+	for _, acct := range accounts {
+		currentState.balances[acct.Currency] = acct.Balance
 	}
-
-	log.Printf("TRANSFER: %d %s @ %f to %s @ %f (Fee: %d)\n", amount, from, fromRate, to, 1.0 / toRate, int(float64(amount) * COINBASE_FEE))
-
-	s.balances[from] -= int64(float64(amount) * fromRate)
-	s.balances[to] += int64(float64(amount) * (1.0 - COINBASE_FEE) / toRate)
-	return nil
 }
 
 func main() {
@@ -73,19 +66,11 @@ func main() {
 		},
 	}
 
-	accounts, err := conn.GetAccounts()
-	if err != nil {
-		log.Fatalln("getAccounts:", err)
-	}
-
-	for _, acct := range accounts {
-		log.Println("Account:", acct.ID, string(acct.Currency), acct.Balance)
-		sim.balances[acct.Currency] = acct.Balance
-	}
-
 	// Run the cycle every tick
 	ticker := time.NewTicker(TICK_DURATION)
 	for range ticker.C {
+		updateBalances(conn)
+
 		// Check balance
 		btcBalance, err := currentBalance(conn, coinbase.CURRENCY_BTC)
 		if err != nil {
@@ -99,7 +84,12 @@ func main() {
 		if err != nil {
 			log.Panicln(err)
 		}
-		//log.Printf("Current Holdings: BTC: %s ETH: %s LTC: %s\n", fmtAmount(btcBalance), fmtAmount(ethBalance), fmtAmount(ltcBalance))
+
+		btcNativeBal, _ := currentNativeBalance(coinbase.CURRENCY_BTC)
+		ethNativeBal, _ := currentNativeBalance(coinbase.CURRENCY_ETH)
+		ltcNativeBal, _ := currentNativeBalance(coinbase.CURRENCY_LTC)
+
+		log.Printf("Current Holdings: BTC: %s ETH: %s LTC: %s\n", fmtAmount(btcNativeBal), fmtAmount(ethNativeBal), fmtAmount(ltcNativeBal))
 
 		totalBalance := btcBalance + ethBalance + ltcBalance
 		log.Printf("Total Assets: %s BTC - %s\n", fmtAmount(totalBalance), time.Now())
@@ -123,21 +113,31 @@ func main() {
 		// NOTE: Since BTC is the intermediary currency, we never actually have to buy or sell it explicitly
 		// Sell any ETH or LTC first
 		if ethDiff < 0 {
-			sell(conn, coinbase.CURRENCY_ETH, 0-ethDiff)
+			if err := sellEth(conn, 0-ethDiff); err != nil {
+				log.Println("sellEth:", err)
+				continue
+			}
 		}
 		if ltcDiff < 0 {
-			sell(conn, coinbase.CURRENCY_LTC, 0-ltcDiff)
+			if err := sellLtc(conn, 0-ltcDiff); err != nil {
+				log.Println("sellLtc:", err)
+				continue
+			}
 		}
 		// Then buy any ETH or LTC
 		if ethDiff > 0 {
-			buy(conn, coinbase.CURRENCY_ETH, ethDiff)
+			if err := buyEth(conn, ethDiff); err != nil {
+				log.Println("buyEth:", err)
+				continue
+			}
 		}
 		if ltcDiff > 0 {
-			buy(conn, coinbase.CURRENCY_LTC, ltcDiff)
+			if err := buyLtc(conn, ltcDiff); err != nil {
+				log.Println("buyLtc:", err)
+				continue
+			}
 		}
 	}
-
-
 
 	log.Println("Done. Goodbye!")
 }
@@ -146,42 +146,65 @@ func fmtAmount(amount int64) string {
 	return fmt.Sprintf("%.8f", float64(amount) / AMOUNT_COIN)
 }
 
-func sell(conn *coinbase.Conn, c coinbase.Currency, amount int64) error {
-	if amount < COINBASE_MIN_TRADE {
-		// Not an error. Just skip the trade
-		return nil
+func toNativeAmount(conn *coinbase.Conn, c coinbase.Currency, amountBtc int64) (int64, error) {
+	rate, err := currentRate(conn, c)
+	if err != nil {
+		return 0, err
 	}
 
-	// TODO Implement for real
-	switch c {
-	case coinbase.CURRENCY_ETH:
-		sim.transfer(conn, coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC, amount)
-	case coinbase.CURRENCY_LTC:
-		sim.transfer(conn, coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC, amount)
-	default:
-		return errors.New("Unsupported currency.")
-	}
-
-	return nil
+	return int64(float64(amountBtc) / rate), nil
 }
 
-func buy(conn *coinbase.Conn, c coinbase.Currency, amount int64) error {
-	if amount < COINBASE_MIN_TRADE {
-		// Not an error. Just skip the trade
-		return nil
+func buyEth(conn *coinbase.Conn, amountBtc int64) error {
+	amountNative, err := toNativeAmount(conn, coinbase.CURRENCY_ETH, amountBtc)
+	if err != nil {
+		return err
 	}
 
-	// TODO Implement for real
-	switch c {
-	case coinbase.CURRENCY_ETH:
-		sim.transfer(conn, coinbase.CURRENCY_BTC, coinbase.CURRENCY_ETH, amount)
-	case coinbase.CURRENCY_LTC:
-		sim.transfer(conn, coinbase.CURRENCY_BTC, coinbase.CURRENCY_LTC, amount)
-	default:
-		return errors.New("Unsupported currency.")
+	if amountNative < COINBASE_MIN_TRADE {
+		return errors.New("Trade too small: "+fmtAmount(amountNative))
 	}
 
-	return nil
+	return conn.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideBuy, amountNative)
+}
+
+func sellEth(conn *coinbase.Conn, amountBtc int64) error {
+	amountNative, err := toNativeAmount(conn, coinbase.CURRENCY_ETH, amountBtc)
+	if err != nil {
+		return err
+	}
+
+	if amountNative < COINBASE_MIN_TRADE {
+		return errors.New("Trade too small: "+fmtAmount(amountNative))
+	}
+
+	return conn.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideSell, amountNative)
+}
+
+func buyLtc(conn *coinbase.Conn, amountBtc int64) error {
+	amountNative, err := toNativeAmount(conn, coinbase.CURRENCY_LTC, amountBtc)
+	if err != nil {
+		return err
+	}
+
+	if amountNative < COINBASE_MIN_TRADE {
+		return errors.New("Trade too small: "+fmtAmount(amountNative))
+	}
+
+	return conn.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideBuy, amountNative)
+}
+
+func sellLtc(conn *coinbase.Conn, amountBtc int64) error {
+	amountNative, err := toNativeAmount(conn, coinbase.CURRENCY_LTC, amountBtc)
+	if err != nil {
+		return err
+	}
+
+	if amountNative < COINBASE_MIN_TRADE {
+		return errors.New("Trade too small: "+fmtAmount(amountNative))
+	}
+
+	return conn.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideSell, amountNative)
 }
 
 func currentBalance(conn *coinbase.Conn, c coinbase.Currency) (int64, error) {
@@ -225,7 +248,7 @@ func currentRate(conn *coinbase.Conn, c coinbase.Currency) (float64, error) {
 
 func currentNativeBalance(c coinbase.Currency) (int64, error) {
 	// TODO Implement for real
-	nativeBal, ok := sim.balances[c]
+	nativeBal, ok := currentState.balances[c]
 	if !ok {
 		return 0, errors.New("Unknown currency")
 	}

@@ -33,10 +33,9 @@ func (c *Conn) CurrentTicker(p ProductID) (*Ticker, error) {
 		}
 	}
 
+	endpointUrl := getEndpointUrl(fmt.Sprintf("/products/%s/ticker", p))
 
-	url := fmt.Sprintf("https://api.gdax.com/products/%s/ticker", p)
-
-	resp, err := c.Requester.makeRequest(http.MethodGet, url, nil, false)
+	resp, err := c.Requester.makeRequest(http.MethodGet, endpointUrl, nil, false)
 	if err != nil {
 		return nil, err
 	}

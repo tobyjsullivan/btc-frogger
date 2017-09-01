@@ -12,9 +12,13 @@ import (
 	"strconv"
 	"log"
 	"math/rand"
+	"encoding/json"
+	"errors"
 )
 
 const (
+	API_BASE_URL = "https://api.gdax.com"
+
 	MAX_RETRIES = 20
 	RETRY_DELAY = 60 * time.Second
 
@@ -33,6 +37,14 @@ type SignedRequester struct {
 	ApiAccessKey string
 	ApiSecretKey string
 	ApiPassphrase string
+}
+
+func getEndpointUrl(path string) string {
+	u, err := url.Parse(API_BASE_URL)
+	if err != nil {
+		log.Panicln("url.Parse:", err)
+	}
+	return u.ResolveReference(&url.URL{Path: path}).String()
 }
 
 func (r *SignedRequester) makeRequest(method string, urlStr string, body io.Reader, signed bool) (*http.Response, error) {
@@ -70,19 +82,18 @@ func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Re
 
 	requestPath := parsedUrl.Path
 
-	var bodyBuf *bytes.Buffer // Can just be nil for empty bodies
+	var bodyBuf bytes.Buffer // Can just be nil for empty bodies
 	var bodyContent string
 	if body != nil {
-		io.Copy(bodyBuf, body)
+		var buf0 bytes.Buffer
+		io.Copy(&buf0, body)
 
-		bodyContent = bodyBuf.String()
+		bodyContent = buf0.String()
 
-		bodyBuf.Reset()
 		bodyBuf.WriteString(bodyContent)
 	}
 
-
-	req, err := http.NewRequest(method, urlStr, nil)
+	req, err := http.NewRequest(method, urlStr, &bodyBuf)
 	if err != nil {
 		return nil, err
 	}
@@ -95,25 +106,43 @@ func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Re
 
 		sig := computeRequestSignature(timestamp, method, requestPath, bodyContent, secret)
 
-		log.Println("Header:", "CB-ACCESS-KEY", r.ApiAccessKey)
-		log.Println("Header:", "CB-ACCESS-SIGN", base64.StdEncoding.EncodeToString(sig))
-		log.Println("Header:", "CB-ACCESS-TIMESTAMP", timestamp)
-		log.Println("Header:", "CB-ACCESS-PASSPHRASE", r.ApiPassphrase)
-
+		req.Header.Add("Content-Type", "application/json")
 		req.Header.Add("CB-ACCESS-KEY", r.ApiAccessKey)
 		req.Header.Add("CB-ACCESS-SIGN", base64.StdEncoding.EncodeToString(sig))
 		req.Header.Add("CB-ACCESS-TIMESTAMP", timestamp)
 		req.Header.Add("CB-ACCESS-PASSPHRASE", r.ApiPassphrase)
 	}
 
-	return http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Println("request error:", resp.StatusCode)
+		var errResp struct{
+			Message string `json:"message"`
+		}
+		decoder := json.NewDecoder(resp.Body)
+		err = decoder.Decode(&errResp)
+		if err != nil {
+			log.Println("Error decoding error response.", err)
+			return nil, err
+		}
+
+		log.Println("Error message:", errResp.Message)
+		return resp, errors.New("request error: "+ errResp.Message)
+	}
+
+	return resp, nil
 }
 
 func computeRequestSignature(timestamp string, method string, requestPath string, body string, secretKey []byte) []byte {
-	input := timestamp + method + requestPath + body
-
 	mac := hmac.New(sha256.New, secretKey)
-	mac.Write([]byte(input))
+	mac.Write([]byte(timestamp))
+	mac.Write([]byte(method))
+	mac.Write([]byte(requestPath))
+	mac.Write([]byte(body))
 
 	return mac.Sum(nil)
 }

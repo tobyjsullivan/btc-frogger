@@ -13,7 +13,8 @@ const (
 )
 
 func (conn *Conn) GetAccounts() ([]*Account, error) {
-	resp, err := conn.Requester.makeRequest(http.MethodGet, "https://api.gdax.com/accounts", nil, true)
+	endpoingUrl := getEndpointUrl("/accounts")
+	resp, err := conn.Requester.makeRequest(http.MethodGet, endpoingUrl, nil, true)
 	if err != nil {
 		log.Println("signed request:", err)
 		return []*Account{}, err
@@ -30,8 +31,6 @@ func (conn *Conn) GetAccounts() ([]*Account, error) {
 
 	out := []*Account{}
 	for _, acct := range accountsResp {
-		log.Println("Account:", acct.ID, acct.Currency)
-
 		id, err := uuid.FromString(acct.ID)
 		if err != nil {
 			return []*Account{}, err
