@@ -24,7 +24,7 @@ type Ticker struct {
 	Time string
 }
 
-func CurrentTicker(p ProductID) (*Ticker, error) {
+func (c *Conn) CurrentTicker(p ProductID) (*Ticker, error) {
 	// Check the cache
 	exp, ok := cacheExpiry[p]
 	if ok && exp.After(time.Now()) {
@@ -36,7 +36,7 @@ func CurrentTicker(p ProductID) (*Ticker, error) {
 
 	url := fmt.Sprintf("https://api.gdax.com/products/%s/ticker", p)
 
-	resp, err := http.Get(url)
+	resp, err := c.Requester.makeRequest(http.MethodGet, url, nil, false)
 	if err != nil {
 		return nil, err
 	}

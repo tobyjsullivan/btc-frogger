@@ -11,9 +11,13 @@ import (
 	"crypto/sha256"
 	"strconv"
 	"log"
+	"math/rand"
 )
 
 const (
+	MAX_RETRIES = 20
+	RETRY_DELAY = 60 * time.Second
+
 	ProductID_ETH_BTC = ProductID("ETH-BTC")
 	ProductID_LTC_BTC = ProductID("LTC-BTC")
 
@@ -23,8 +27,6 @@ const (
 )
 
 type ProductID string
-
-
 type Currency string
 
 type SignedRequester struct {
@@ -33,7 +35,32 @@ type SignedRequester struct {
 	ApiPassphrase string
 }
 
-func (r *SignedRequester) MakeRequest(method string, urlStr string, body io.Reader) (*http.Response, error) {
+func (r *SignedRequester) makeRequest(method string, urlStr string, body io.Reader, signed bool) (*http.Response, error) {
+	success := false
+	tries := 0
+	var err error
+	for !success && tries < MAX_RETRIES {
+		if tries > 0 {
+			log.Println("Sleeping before retry...")
+			time.Sleep(RETRY_DELAY + time.Duration(rand.Intn(2000)) * time.Millisecond)
+			log.Println("Retrying...")
+		}
+
+		var resp *http.Response
+		resp, err = r.doMakeRequest(method, urlStr, body, signed)
+		if err != nil {
+			tries++
+			log.Println("request failed:", err)
+			continue
+		}
+
+		return resp, nil
+	}
+
+	return nil, err
+}
+
+func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Reader, signed bool) (*http.Response, error) {
 	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 
 	parsedUrl, err := url.Parse(urlStr)
@@ -54,27 +81,30 @@ func (r *SignedRequester) MakeRequest(method string, urlStr string, body io.Read
 		bodyBuf.WriteString(bodyContent)
 	}
 
-	secret, err := base64.StdEncoding.DecodeString(r.ApiSecretKey)
-	if err != nil {
-		return nil, err
-	}
-
-	sig := computeRequestSignature(timestamp, method, requestPath, bodyContent, secret)
 
 	req, err := http.NewRequest(method, urlStr, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Println("Header:", "CB-ACCESS-KEY", r.ApiAccessKey)
-	log.Println("Header:", "CB-ACCESS-SIGN", base64.StdEncoding.EncodeToString(sig))
-	log.Println("Header:", "CB-ACCESS-TIMESTAMP", timestamp)
-	log.Println("Header:", "CB-ACCESS-PASSPHRASE", r.ApiPassphrase)
+	if signed {
+		secret, err := base64.StdEncoding.DecodeString(r.ApiSecretKey)
+		if err != nil {
+			return nil, err
+		}
 
-	req.Header.Add("CB-ACCESS-KEY", r.ApiAccessKey)
-	req.Header.Add("CB-ACCESS-SIGN", base64.StdEncoding.EncodeToString(sig))
-	req.Header.Add("CB-ACCESS-TIMESTAMP", timestamp)
-	req.Header.Add("CB-ACCESS-PASSPHRASE", r.ApiPassphrase)
+		sig := computeRequestSignature(timestamp, method, requestPath, bodyContent, secret)
+
+		log.Println("Header:", "CB-ACCESS-KEY", r.ApiAccessKey)
+		log.Println("Header:", "CB-ACCESS-SIGN", base64.StdEncoding.EncodeToString(sig))
+		log.Println("Header:", "CB-ACCESS-TIMESTAMP", timestamp)
+		log.Println("Header:", "CB-ACCESS-PASSPHRASE", r.ApiPassphrase)
+
+		req.Header.Add("CB-ACCESS-KEY", r.ApiAccessKey)
+		req.Header.Add("CB-ACCESS-SIGN", base64.StdEncoding.EncodeToString(sig))
+		req.Header.Add("CB-ACCESS-TIMESTAMP", timestamp)
+		req.Header.Add("CB-ACCESS-PASSPHRASE", r.ApiPassphrase)
+	}
 
 	return http.DefaultClient.Do(req)
 }

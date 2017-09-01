@@ -13,7 +13,7 @@ const (
 )
 
 func (conn *Conn) GetAccounts() ([]*Account, error) {
-	resp, err := conn.Requester.MakeRequest(http.MethodGet, "https://api.gdax.com/accounts", nil)
+	resp, err := conn.Requester.makeRequest(http.MethodGet, "https://api.gdax.com/accounts", nil, true)
 	if err != nil {
 		log.Println("signed request:", err)
 		return []*Account{}, err
