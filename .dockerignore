@@ -1,4 +1,5 @@
-/.env
-/*.iml
-/.idea
+.env
+*.iml
+.idea
+.git
 
