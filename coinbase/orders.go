@@ -65,7 +65,8 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64) err
 	err = decoder.Decode(&orderResp)
 
 	if orderResp.Status == "rejected" {
-		return errors.New("order rejected:"+orderResp.RejectReason)
+		log.Println("order rejected:", orderResp.RejectReason)
+		return nil // Return peacefully so we can try again next time
 	}
 
 	log.Println("order resp:", resp.Status, orderResp.Status)
