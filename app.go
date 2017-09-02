@@ -12,6 +12,7 @@ import (
 	"github.com/tobyjsullivan/btc-frogger/coinbase"
 	"github.com/tobyjsullivan/btc-frogger/orders"
 	"github.com/tobyjsullivan/btc-frogger/rates"
+	"github.com/tobyjsullivan/btc-frogger/spread"
 )
 
 const (
@@ -48,6 +49,9 @@ func main() {
 	log.Println("Building rate service...")
 	rateSvc := rates.NewService(ctx, conn)
 
+	log.Println("Building spread service...")
+	spreadSvc := spread.NewService(ctx, conn)
+
 	log.Println("Building orders service...")
 	orderSvc := orders.NewService(ctx, conn, dryRun)
 
@@ -69,6 +73,12 @@ func main() {
 		}
 
 		log.Printf("Current rates: ETH/BTC - %.4f; LTC/BTC - %.4f\n", ethBtcRate, ltcBtcRate)
+
+		ethBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_ETH_BTC)
+		ethAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_ETH_BTC)
+		ltcBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_LTC_BTC)
+		ltcAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_LTC_BTC)
+		log.Printf("Current spreads: ETH/BTC - %d:%d; LTC/BTC - %d:%d\n", ethBid, ethAsk, ltcBid, ltcAsk)
 
 		// Check balance
 		btcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_BTC)
