@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/tobyjsullivan/btc-frogger/coinbase"
 	"os"
+	"strings"
 )
 
 const (
@@ -23,6 +24,7 @@ const (
 )
 
 var (
+	dryRun = os.Getenv("DRY_RUN") != "" && strings.ToLower(os.Getenv("DRY_RUN")) != "false"
 	coinbaseAccessKey = os.Getenv("COINBASE_API_ACCESS_KEY")
 	coinbaseSecretKey = os.Getenv("COINBASE_API_SECRET_KEY")
 	coinbasePassphrase = os.Getenv("COINBASE_API_PASSPHRASE")
@@ -165,6 +167,13 @@ func buyEth(conn *coinbase.Conn, amountBtc int64) error {
 		return errors.New("Trade too small: "+fmtAmount(amountNative))
 	}
 
+	log.Println("Buying ETH")
+
+	if dryRun {
+		log.Println("DRY RUN: order skipped")
+		return nil
+	}
+
 	return conn.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideBuy, amountNative)
 }
 
@@ -176,6 +185,13 @@ func sellEth(conn *coinbase.Conn, amountBtc int64) error {
 
 	if amountNative < COINBASE_MIN_TRADE {
 		return errors.New("Trade too small: "+fmtAmount(amountNative))
+	}
+
+	log.Println("Selling ETH")
+
+	if dryRun {
+		log.Println("DRY RUN: order skipped")
+		return nil
 	}
 
 	return conn.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideSell, amountNative)
@@ -191,6 +207,13 @@ func buyLtc(conn *coinbase.Conn, amountBtc int64) error {
 		return errors.New("Trade too small: "+fmtAmount(amountNative))
 	}
 
+	log.Println("Buying LTC")
+
+	if dryRun {
+		log.Println("DRY RUN: order skipped")
+		return nil
+	}
+
 	return conn.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideBuy, amountNative)
 }
 
@@ -202,6 +225,13 @@ func sellLtc(conn *coinbase.Conn, amountBtc int64) error {
 
 	if amountNative < COINBASE_MIN_TRADE {
 		return errors.New("Trade too small: "+fmtAmount(amountNative))
+	}
+
+	log.Println("Selling LTC")
+
+	if dryRun {
+		log.Println("DRY RUN: order skipped")
+		return nil
 	}
 
 	return conn.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideSell, amountNative)
