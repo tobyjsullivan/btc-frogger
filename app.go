@@ -53,13 +53,20 @@ func main() {
 	spreadSvc := spread.NewService(ctx, conn)
 
 	log.Println("Building orders service...")
-	orderSvc := orders.NewService(ctx, conn, dryRun)
+	orderSvc := orders.NewService(ctx, conn, spreadSvc, dryRun)
 
 	log.Println("Services initialized.")
 
 	// Run the cycle every tick
 	ticker := time.NewTicker(TICK_DURATION)
 	for range ticker.C {
+		// First thing, cancel all pending orders to clear out anything that was unfulfilled last time
+		if dryRun {
+			log.Println("DRY RUN: Skipping order cancel")
+		} else {
+			conn.CancelAllOrders()
+		}
+
 		ethBtcRate, ok := rateSvc.CurrentRate(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC)
 		if !ok {
 			log.Println("ETH/BTC rate not available")
@@ -73,12 +80,6 @@ func main() {
 		}
 
 		log.Printf("Current rates: ETH/BTC - %.4f; LTC/BTC - %.4f\n", ethBtcRate, ltcBtcRate)
-
-		ethBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_ETH_BTC)
-		ethAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_ETH_BTC)
-		ltcBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_LTC_BTC)
-		ltcAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_LTC_BTC)
-		log.Printf("Current spreads: ETH/BTC - %d:%d; LTC/BTC - %d:%d\n", ethBid, ethAsk, ltcBid, ltcAsk)
 
 		// Check balance
 		btcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_BTC)
@@ -134,6 +135,12 @@ func main() {
 		}
 
 		log.Printf("Trade Goals: %s ETH; %s LTC\n", fmtAmount(ntvEthDiff), fmtAmount(ntvLtcDiff))
+
+		ethBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_ETH_BTC)
+		ethAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_ETH_BTC)
+		ltcBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_LTC_BTC)
+		ltcAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_LTC_BTC)
+		log.Printf("Current spreads: ETH/BTC - %d:%d; LTC/BTC - %d:%d\n", ethBid, ethAsk, ltcBid, ltcAsk)
 
 		// There are six potential cases
 		// 1. +BTC, -ETH, -LTC

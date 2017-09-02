@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/tobyjsullivan/btc-frogger/coinbase"
+	"github.com/tobyjsullivan/btc-frogger/spread"
 )
 
 const (
@@ -15,14 +16,16 @@ const (
 type OrderSvc struct {
 	conn       *coinbase.Conn
 	orderQueue chan *orderReq
+	spreadSvc  *spread.SpreadSvc
 	dryRun     bool
 	logger     *log.Logger
 }
 
-func NewService(ctx context.Context, conn *coinbase.Conn, dryRun bool) *OrderSvc {
+func NewService(ctx context.Context, conn *coinbase.Conn, spreadSvc *spread.SpreadSvc, dryRun bool) *OrderSvc {
 	svc := &OrderSvc{
 		conn:       conn,
 		orderQueue: make(chan *orderReq, 2),
+		spreadSvc:  spreadSvc,
 		dryRun:     dryRun,
 		logger:     log.New(os.Stdout, "[orders] ", 0),
 	}
@@ -47,6 +50,10 @@ type orderReq struct {
 }
 
 func (svc *OrderSvc) loop(ctx context.Context) {
+	mSpreadIndex := map[coinbase.Currency]coinbase.ProductID{
+		coinbase.CURRENCY_ETH: coinbase.ProductID_ETH_BTC,
+		coinbase.CURRENCY_LTC: coinbase.ProductID_LTC_BTC,
+	}
 
 	for {
 		select {
@@ -58,12 +65,32 @@ func (svc *OrderSvc) loop(ctx context.Context) {
 				continue
 			}
 
+			// Determine limit price
+			var price int64
+			pid, _ := mSpreadIndex[ord.currency]
+			var spreadReady bool
+			switch ord.side {
+			case coinbase.SideBuy:
+				price, spreadReady = svc.spreadSvc.CurrentBid(pid)
+			case coinbase.SideSell:
+				price, spreadReady = svc.spreadSvc.CurrentAsk(pid)
+			default:
+				svc.logger.Println("Unexpected side:", ord.side)
+				continue
+			}
+			if !spreadReady {
+				svc.logger.Println("Spread wasnt ready:", pid)
+				continue
+			}
+
+			svc.logger.Println("Order limit price:", price)
+
 			if svc.dryRun {
 				svc.logger.Println("DRY RUN: order skipped.")
 				continue
 			}
 
-			if err := svc.conn.PlaceOrder(ord.currency, ord.side, ord.ntvAmount); err != nil {
+			if err := svc.conn.PlaceOrder(ord.currency, ord.side, ord.ntvAmount, price); err != nil {
 				svc.logger.Println("place order:", err)
 				continue
 			}

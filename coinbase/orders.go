@@ -16,7 +16,7 @@ const (
 
 type OrderSide string
 
-func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64) error {
+func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64, price int64) error {
 	log.Printf("PLACE ORDER: %s %s %s", side, fmtAmount(amountNative), c)
 
 	var productId ProductID
@@ -30,15 +30,19 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64) err
 	}
 
 	reqBody := struct {
+		Price     string `json:"price"`
 		Size      string `json:"size"`
 		Side      string `json:"side"`
 		Type      string `json:"type"`
 		ProductID string `json:"product_id"`
+		PostOnly  bool   `json:"post_only"`
 	}{
+		Price:     fmt.Sprintf("%.8f", float64(price)/AmountCoin),
 		Size:      fmt.Sprintf("%.8f", float64(amountNative)/AmountCoin),
 		Side:      string(side),
-		Type:      "market",
+		Type:      "limit",
 		ProductID: string(productId),
+		PostOnly:  true,
 	}
 
 	reqJs, err := json.Marshal(&reqBody)
@@ -70,6 +74,21 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64) err
 	}
 
 	log.Println("order resp:", resp.Status, orderResp.Status)
+
+	return nil
+}
+
+func (conn *Conn) CancelAllOrders() error {
+	endpointUrl := getEndpointUrl("/orders")
+
+	log.Println("Cancelling all oper orders")
+
+	resp, err := conn.Requester.makeRequest(http.MethodDelete, endpointUrl, nil, true)
+	if err != nil {
+		log.Panicln("cancel orders:", err)
+	}
+
+	log.Println("Cancel resp:", resp.Status)
 
 	return nil
 }
