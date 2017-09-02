@@ -11,6 +11,7 @@ import (
 
 const (
 	coinbaseMinTrade = int64(0.01 * float64(coinbase.AmountCoin))
+	coinbaseQuoteIncrement = 1000
 )
 
 type OrderSvc struct {
@@ -71,9 +72,11 @@ func (svc *OrderSvc) loop(ctx context.Context) {
 			var spreadReady bool
 			switch ord.side {
 			case coinbase.SideBuy:
-				price, spreadReady = svc.spreadSvc.CurrentBid(pid)
-			case coinbase.SideSell:
 				price, spreadReady = svc.spreadSvc.CurrentAsk(pid)
+				price -= coinbaseQuoteIncrement // Exactly one point below
+			case coinbase.SideSell:
+				price, spreadReady = svc.spreadSvc.CurrentBid(pid)
+				price += coinbaseQuoteIncrement // Exactly one point above current bid
 			default:
 				svc.logger.Println("Unexpected side:", ord.side)
 				continue
