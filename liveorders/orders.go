@@ -12,6 +12,9 @@ import (
 	"errors"
 	"sync"
 	"time"
+	"net/http"
+	"encoding/base64"
+	"github.com/tobyjsullivan/btc-frogger/coinbase"
 )
 
 const (
@@ -48,14 +51,34 @@ func RunOrders() {
 	defer conn.Close()
 	logger.Println("Connected:", r.Status)
 
+	// Compute sig for authenticated subscribe
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	method := http.MethodGet
+	path := "/users/self"
+	accessKey := os.Getenv("COINBASE_API_ACCESS_KEY")
+	passphrase := os.Getenv("COINBASE_API_PASSPHRASE")
+	bSecretKey, err := base64.StdEncoding.DecodeString(os.Getenv("COINBASE_API_SECRET_KEY"))
+	if err != nil {
+		logger.Panicln("decode:", err)
+	}
+	signature := coinbase.ComputeRequestSignature(timestamp, method, path, "", bSecretKey)
+
 	// Send a subscribe message
 	logger.Println("Generating subscribe message...")
 	subscribeMsg := struct {
 		Type string `json:"type"`
 		ProductIDs []string `json:"product_ids"`
+		Signature string `json:"signature"`
+		Key string `json:"key"`
+		Passphrase string `json:"passphrase"`
+		Timestamp string `json:"timestamp"`
 	}{
 		Type: "subscribe",
 		ProductIDs: []string{PRODUCT_ID_ETH_BTC},
+		Signature: base64.StdEncoding.EncodeToString(signature),
+		Key: accessKey,
+		Passphrase: passphrase,
+		Timestamp: timestamp,
 	}
 	msg, err := json.Marshal(&subscribeMsg)
 	if err != nil {

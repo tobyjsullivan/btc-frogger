@@ -104,7 +104,7 @@ func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Re
 			return nil, err
 		}
 
-		sig := computeRequestSignature(timestamp, method, requestPath, bodyContent, secret)
+		sig := ComputeRequestSignature(timestamp, method, requestPath, bodyContent, secret)
 
 		req.Header.Add("Content-Type", "application/json")
 		req.Header.Add("CB-ACCESS-KEY", r.ApiAccessKey)
@@ -137,7 +137,7 @@ func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Re
 	return resp, nil
 }
 
-func computeRequestSignature(timestamp string, method string, requestPath string, body string, secretKey []byte) []byte {
+func ComputeRequestSignature(timestamp string, method string, requestPath string, body string, secretKey []byte) []byte {
 	mac := hmac.New(sha256.New, secretKey)
 	mac.Write([]byte(timestamp))
 	mac.Write([]byte(method))
