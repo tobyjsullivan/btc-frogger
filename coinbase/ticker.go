@@ -1,27 +1,27 @@
 package coinbase
 
 import (
-	"net/http"
-	"fmt"
-	"errors"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 )
 
 var (
-	cache map[ProductID]*Ticker = make(map[ProductID]*Ticker)
+	cache       map[ProductID]*Ticker   = make(map[ProductID]*Ticker)
 	cacheExpiry map[ProductID]time.Time = make(map[ProductID]time.Time)
 )
 
 type Ticker struct {
 	TradeID int
-	Price float64
-	Size float64
-	Bid float64
-	Ask float64
-	Volume float64
-	Time string
+	Price   float64
+	Size    float64
+	Bid     float64
+	Ask     float64
+	Volume  float64
+	Time    string
 }
 
 func (c *Conn) CurrentTicker(p ProductID) (*Ticker, error) {
@@ -41,18 +41,18 @@ func (c *Conn) CurrentTicker(p ProductID) (*Ticker, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("Unexpected status code: "+resp.Status)
+		return nil, errors.New("Unexpected status code: " + resp.Status)
 	}
 
 	// Parse the JSON response
 	var jsResp struct {
-		TradeID int `json:"trade_id"`
-		Price string `json:"price"`
-		Size string `json:"size"`
-		Bid string `json:"bid"`
-		Ask string `json:"ask"`
-		Volume string `json:"volume"`
-		Time string `json:"time"`
+		TradeID int    `json:"trade_id"`
+		Price   string `json:"price"`
+		Size    string `json:"size"`
+		Bid     string `json:"bid"`
+		Ask     string `json:"ask"`
+		Volume  string `json:"volume"`
+		Time    string `json:"time"`
 	}
 
 	decoder := json.NewDecoder(resp.Body)
@@ -88,12 +88,12 @@ func (c *Conn) CurrentTicker(p ProductID) (*Ticker, error) {
 
 	ticker := &Ticker{
 		TradeID: jsResp.TradeID,
-		Price: price,
-		Size: size,
-		Bid: bid,
-		Ask: ask,
-		Volume: volume,
-		Time: jsResp.Time,
+		Price:   price,
+		Size:    size,
+		Bid:     bid,
+		Ask:     ask,
+		Volume:  volume,
+		Time:    jsResp.Time,
 	}
 
 	cache[p] = ticker

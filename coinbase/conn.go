@@ -1,5 +1,5 @@
 package coinbase
 
-type Conn struct{
+type Conn struct {
 	Requester *SignedRequester
 }

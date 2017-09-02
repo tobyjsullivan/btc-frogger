@@ -1,11 +1,12 @@
 package coinbase
 
 import (
-	"net/http"
 	"encoding/json"
 	"log"
-	"github.com/satori/go.uuid"
+	"net/http"
 	"strconv"
+
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -13,17 +14,17 @@ const (
 )
 
 func (conn *Conn) GetAccounts() ([]*Account, error) {
-	endpoingUrl := getEndpointUrl("/accounts")
-	resp, err := conn.Requester.makeRequest(http.MethodGet, endpoingUrl, nil, true)
+	endpointUrl := getEndpointUrl("/accounts")
+	resp, err := conn.Requester.makeRequest(http.MethodGet, endpointUrl, nil, true)
 	if err != nil {
 		log.Println("signed request:", err)
 		return []*Account{}, err
 	}
 
-	var accountsResp []struct{
-		ID string `json:"id"`
-		Currency string `json:"currency"`
-		Balance string `json:"balance"`
+	var accountsResp []struct {
+		ID        string `json:"id"`
+		Currency  string `json:"currency"`
+		Balance   string `json:"balance"`
 		Available string `json:"available"`
 	}
 	decoder := json.NewDecoder(resp.Body)
@@ -44,9 +45,9 @@ func (conn *Conn) GetAccounts() ([]*Account, error) {
 		balance := int64(fBalance * float64(AmountCoin))
 
 		out = append(out, &Account{
-			ID: id,
+			ID:       id,
 			Currency: Currency(acct.Currency),
-			Balance: balance,
+			Balance:  balance,
 		})
 	}
 
@@ -54,7 +55,7 @@ func (conn *Conn) GetAccounts() ([]*Account, error) {
 }
 
 type Account struct {
-	ID uuid.UUID
+	ID       uuid.UUID
 	Currency Currency
-	Balance int64
+	Balance  int64
 }

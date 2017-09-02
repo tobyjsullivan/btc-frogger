@@ -1,19 +1,19 @@
 package coinbase
 
 import (
-	"net/http"
-	"time"
-	"net/url"
-	"io"
 	"bytes"
-	"encoding/base64"
 	"crypto/hmac"
 	"crypto/sha256"
-	"strconv"
-	"log"
-	"math/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
+	"math/rand"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
 )
 
 const (
@@ -34,8 +34,8 @@ type ProductID string
 type Currency string
 
 type SignedRequester struct {
-	ApiAccessKey string
-	ApiSecretKey string
+	ApiAccessKey  string
+	ApiSecretKey  string
 	ApiPassphrase string
 }
 
@@ -54,7 +54,7 @@ func (r *SignedRequester) makeRequest(method string, urlStr string, body io.Read
 	for !success && tries < MAX_RETRIES {
 		if tries > 0 {
 			log.Println("Sleeping before retry...")
-			time.Sleep(RETRY_DELAY + time.Duration(rand.Intn(2000)) * time.Millisecond)
+			time.Sleep(RETRY_DELAY + time.Duration(rand.Intn(2000))*time.Millisecond)
 			log.Println("Retrying...")
 		}
 
@@ -120,7 +120,7 @@ func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Re
 
 	if resp.StatusCode != http.StatusOK {
 		log.Println("request error:", resp.StatusCode)
-		var errResp struct{
+		var errResp struct {
 			Message string `json:"message"`
 		}
 		decoder := json.NewDecoder(resp.Body)
@@ -131,7 +131,7 @@ func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Re
 		}
 
 		log.Println("Error message:", errResp.Message)
-		return resp, errors.New("request error: "+ errResp.Message)
+		return resp, errors.New("request error: " + errResp.Message)
 	}
 
 	return resp, nil

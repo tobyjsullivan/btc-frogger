@@ -1,16 +1,16 @@
 package coinbase
 
 import (
-	"log"
-	"fmt"
-	"errors"
-	"encoding/json"
 	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
 	"net/http"
 )
 
 const (
-	SideBuy = OrderSide("buy")
+	SideBuy  = OrderSide("buy")
 	SideSell = OrderSide("sell")
 )
 
@@ -30,14 +30,14 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64) err
 	}
 
 	reqBody := struct {
-		Size string `json:"size"`
-		Side string `json:"side"`
-		Type string `json:"type"`
+		Size      string `json:"size"`
+		Side      string `json:"side"`
+		Type      string `json:"type"`
 		ProductID string `json:"product_id"`
 	}{
-		Size: fmt.Sprintf("%.8f", float64(amountNative) / AmountCoin),
-		Side: string(side),
-		Type: "market",
+		Size:      fmt.Sprintf("%.8f", float64(amountNative)/AmountCoin),
+		Side:      string(side),
+		Type:      "market",
 		ProductID: string(productId),
 	}
 
@@ -57,9 +57,9 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64) err
 		log.Panicln("order:", err)
 	}
 
-	var orderResp struct{
+	var orderResp struct {
 		RejectReason string `json:"reject_reason,omitempty"`
-		Status string `json:"status"`
+		Status       string `json:"status"`
 	}
 	decoder := json.NewDecoder(resp.Body)
 	err = decoder.Decode(&orderResp)
@@ -75,5 +75,5 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64) err
 }
 
 func fmtAmount(amount int64) string {
-	return fmt.Sprintf("%.8f", float64(amount) / AmountCoin)
+	return fmt.Sprintf("%.8f", float64(amount)/AmountCoin)
 }
