@@ -19,7 +19,7 @@ import (
 const (
 	API_BASE_URL = "https://api.gdax.com"
 
-	MAX_RETRIES = 20
+	MAX_RETRIES = 1
 	RETRY_DELAY = 60 * time.Second
 
 	ProductID_ETH_BTC = ProductID("ETH-BTC")
