@@ -29,6 +29,15 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64, pri
 		return errors.New(fmt.Sprintf("Unexpected currency: %s", c))
 	}
 
+	// Price must be a rounded multiple of QuoteIncrement or Coinbase will resp w/ BAD_REQUEST
+	if price % QuoteIncrement != 0 {
+		rndUp := (price % QuoteIncrement) >= (QuoteIncrement / 2)
+		price = (price / QuoteIncrement) * QuoteIncrement
+		if rndUp {
+			price += QuoteIncrement
+		}
+	}
+
 	reqBody := struct {
 		Price     string `json:"price"`
 		Size      string `json:"size"`

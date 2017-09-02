@@ -28,6 +28,8 @@ const (
 	CURRENCY_ETH = Currency("ETH")
 	CURRENCY_BTC = Currency("BTC")
 	CURRENCY_LTC = Currency("LTC")
+
+	QuoteIncrement = 1000
 )
 
 type ProductID string
