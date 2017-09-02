@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	loopDuration = 2 * time.Second
+	loopDuration = 1 * time.Second
 )
 
 type spread struct {

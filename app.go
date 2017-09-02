@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	TICK_DURATION = 60 * time.Second
+	TICK_DURATION = 2 * time.Second
 )
 
 var (
