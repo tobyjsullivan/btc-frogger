@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"errors"
 	"sync"
+	"time"
 )
 
 const (
@@ -18,8 +19,8 @@ const (
 )
 
 const (
-	SIDE_BUY = iota
-	SIDE_SELL = iota
+	SIDE_BUY = "buy"
+	SIDE_SELL = "sell"
 )
 
 func RunOrders() {
@@ -68,6 +69,34 @@ func RunOrders() {
 	}
 	logger.Println("Subscribe message sent.")
 
+	// Print order count
+	go func() {
+		ticker := time.Tick(100 * time.Millisecond)
+		for range ticker {
+			logger.Printf("ETH ORDER BOOK: %d open orders\n", ethOrderBook.numOrders())
+		}
+	}()
+
+	// Print high buy order
+	go func() {
+		ticker := time.Tick(300 * time.Millisecond)
+		for range ticker {
+			high := ethOrderBook.highBuy()
+
+			logger.Printf("HIGH BUY: %.8f\n", high)
+		}
+	}()
+
+	// Print low sell order
+	go func() {
+		ticker := time.Tick(300 * time.Millisecond)
+		for range ticker {
+			high := ethOrderBook.lowSell()
+
+			logger.Printf("LOW SELL: %.8f\n", high)
+		}
+	}()
+
 	// Read incoming messages
 	done := make(chan struct{})
 	messageQueue := make(chan string, 2000)
@@ -84,7 +113,7 @@ func RunOrders() {
 
 			switch t {
 			case websocket.TextMessage:
-				logger.Printf("Received message: %s\n", message)
+				//logger.Printf("Received message: %s\n", message)
 				queue <- string(message)
 			case websocket.BinaryMessage:
 				logger.Println("Received a binary message...")
@@ -102,53 +131,7 @@ func RunOrders() {
 		for {
 			select {
 			case msg := <-queue:
-				msgType := struct {
-					Type string `json:"type"`
-				}{}
-				err := json.Unmarshal([]byte(msg), &msgType)
-				if err != nil {
-					logger.Println("type unmarshal:", err)
-					return
-				}
-
-				logger.Println("Message received:", msgType.Type)
-				switch msgType.Type {
-				case "open":
-					openMsg, err := parseOpenMessage(msg, logger)
-					if err != nil {
-						logger.Println("parse open:", err)
-						return
-					}
-
-					order := &order{
-						OrderID: openMsg.OrderID,
-						Sequence: openMsg.Sequence,
-						Price: openMsg.Price,
-						RemainingSize: openMsg.RemainingSize,
-					}
-
-					switch openMsg.Side {
-					case SIDE_BUY:
-						switch openMsg.ProductID {
-						case PRODUCT_ID_ETH_BTC:
-							ethOrderBook.submitBuyOrder(order)
-						default:
-							logger.Println("Unknown product ID:", openMsg.ProductID)
-							return
-						}
-					case SIDE_SELL:
-						switch openMsg.ProductID {
-						case PRODUCT_ID_ETH_BTC:
-							ethOrderBook.submitSellOrder(order)
-						default:
-							logger.Println("Unknown product ID:", openMsg.ProductID)
-							return
-						}
-					}
-
-				}
-				logger.Printf("ETH ORDER BOOK: %d BUYS; %d SELLS\n", ethOrderBook.numBuyOrders(), ethOrderBook.numSellOrders())
-
+				go processMessage(ethOrderBook, msg, logger)
 			}
 		}
 	}(messageQueue, done, logger)
@@ -157,6 +140,119 @@ func RunOrders() {
 	case <-done:
 		logger.Println("Done. Goodbye.")
 	}
+}
+
+func processMessage(ethOrderBook *orderBook, msg string, logger *log.Logger) {
+	parsedMsg := struct {
+		Type string `json:"type"`
+		//OrderId string `json:"order_id"`
+		//ClientOID string `json:"client_oid"`
+		//Side string `json:"side"`
+		//Reason string `json:"reason"`
+		//ProductID string `json:"product_id"`
+		//Price string `json:"price"`
+		//RemainingSize string `json:"remaining_size"`
+		//Size string `json:"size"`
+		//Sequence int `json:"sequence"`
+		//Time string `json:"time"`
+		//OrderType string `json:"order_type"`
+
+	}{}
+	err := json.Unmarshal([]byte(msg), &parsedMsg)
+	if err != nil {
+		logger.Println("type unmarshal:", err)
+		return
+	}
+
+	//logger.Println("Message received:", parsedMsg.Type)
+	switch parsedMsg.Type {
+	case "open":
+		openMsg, err := parseOpenMessage(msg, logger)
+		if err != nil {
+			logger.Println("parse open:", err)
+			return
+		}
+
+		order := &order{
+			OrderID: openMsg.OrderID,
+			Sequence: openMsg.Sequence,
+			Price: openMsg.Price,
+			RemainingSize: openMsg.RemainingSize,
+			Side: openMsg.Side,
+		}
+
+		switch openMsg.ProductID {
+		case PRODUCT_ID_ETH_BTC:
+			ethOrderBook.openOrder(order)
+		default:
+			logger.Println("Unknown product ID:", openMsg.ProductID)
+			return
+		}
+	case "done":
+		doneMsg, err := parseDoneMessage(msg, logger)
+		if err != nil {
+			logger.Println("parse done:", err)
+			return
+		}
+
+		ethOrderBook.closeOrder(doneMsg.OrderID)
+	case "match":
+		matchMsg, err := parseMatchMessage(msg, logger)
+		if err != nil {
+			logger.Println("parse match:", err)
+			return
+		}
+		ethOrderBook.closeOrder(matchMsg.MakerOrderID)
+	case "received":
+		// IGNORE
+	default:
+		logger.Println("Message not processed:", parsedMsg.Type)
+	}
+
+}
+
+func parseDoneMessage(msg string, logger *log.Logger) (*doneMsg, error) {
+	parsed := struct {
+		OrderID string `json:"order_id"`
+	}{}
+
+	err := json.Unmarshal([]byte(msg), &parsed)
+	if err != nil {
+		logger.Println("open unmarshal:", err)
+		return nil, err
+	}
+
+	orderId, err := uuid.FromString(parsed.OrderID)
+	if err != nil {
+		logger.Println("orderId:", err)
+		return nil, err
+	}
+
+	return &doneMsg{
+		OrderID: orderId,
+	}, nil
+}
+
+func parseMatchMessage(msg string, logger *log.Logger) (*matchMsg, error) {
+	parsed := struct {
+		MakerOrderId string `json:"maker_order_id"`
+	}{}
+
+	err := json.Unmarshal([]byte(msg), &parsed)
+	if err != nil {
+		logger.Println("open unmarshal:", err)
+		return nil, err
+	}
+
+	makerOrderId, err := uuid.FromString(parsed.MakerOrderId)
+	if err != nil {
+		logger.Println("orderId:", err)
+		return nil, err
+	}
+
+	return &matchMsg{
+		MakerOrderID: makerOrderId,
+	}, nil
 }
 
 func parseOpenMessage(msg string, logger *log.Logger) (*openMsg, error) {
@@ -194,7 +290,7 @@ func parseOpenMessage(msg string, logger *log.Logger) (*openMsg, error) {
 		return nil, err
 	}
 
-	var side uint = 0
+	var side string
 	switch parsed.Side {
 	case "buy":
 		side = SIDE_BUY
@@ -219,48 +315,76 @@ type openMsg struct {
 	OrderID uuid.UUID
 	Sequence uint64
 	ProductID string
-	Side uint
+	Side string
 	Price float64
 	RemainingSize float64
 }
 
+type doneMsg struct {
+	OrderID uuid.UUID
+}
+
+type matchMsg struct {
+	MakerOrderID uuid.UUID
+}
+
 type orderBook struct {
 	mx sync.Mutex
-	BuyOrders map[uuid.UUID]*order
-	SellOrders map[uuid.UUID]*order
+	OpenOrders map[uuid.UUID]*order
 }
 
 func newOrderBook() *orderBook {
 	return &orderBook{
-		BuyOrders: make(map[uuid.UUID]*order),
-		SellOrders: make(map[uuid.UUID]*order),
+		OpenOrders: make(map[uuid.UUID]*order),
 	}
 }
 
-func (b *orderBook) submitBuyOrder(order *order) error {
+func (b *orderBook) openOrder(order *order) {
 	b.mx.Lock()
 	defer b.mx.Unlock()
 
-	b.BuyOrders[order.OrderID] = order
-
-	return nil
+	b.OpenOrders[order.OrderID] = order
 }
 
-func (b *orderBook) submitSellOrder(order *order) error {
+func (b *orderBook) closeOrder(orderId uuid.UUID) {
 	b.mx.Lock()
 	defer b.mx.Unlock()
 
-	b.SellOrders[order.OrderID] = order
-
-	return nil
+	delete(b.OpenOrders, orderId)
 }
 
-func (b *orderBook) numBuyOrders() int {
-	return len(b.BuyOrders)
+func (b *orderBook) numOrders() int {
+	return len(b.OpenOrders)
 }
 
-func (b *orderBook) numSellOrders() int {
-	return len(b.SellOrders)
+func (b *orderBook) highBuy() float64 {
+	var high float64
+	for _, o := range b.OpenOrders {
+		if o.Side != SIDE_BUY {
+			continue
+		}
+
+		if o.Price > high {
+			high = o.Price
+		}
+	}
+
+	return high
+}
+
+func (b *orderBook) lowSell() float64 {
+	var low float64
+	for _, o := range b.OpenOrders {
+		if o.Side != SIDE_SELL {
+			continue
+		}
+
+		if o.Price < low {
+			low = o.Price
+		}
+	}
+
+	return low
 }
 
 type order struct {
@@ -268,5 +392,6 @@ type order struct {
 	Sequence uint64
 	Price float64
 	RemainingSize float64
+	Side string
 }
 
