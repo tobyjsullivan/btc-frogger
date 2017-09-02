@@ -58,7 +58,8 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64, pri
 
 	resp, err := conn.Requester.makeRequest(http.MethodPost, endpointUrl, &buf, true)
 	if err != nil {
-		log.Panicln("order:", err)
+		log.Println("order:", err)
+		return err
 	}
 
 	var orderResp struct {
@@ -85,7 +86,8 @@ func (conn *Conn) CancelAllOrders() error {
 
 	resp, err := conn.Requester.makeRequest(http.MethodDelete, endpointUrl, nil, true)
 	if err != nil {
-		log.Panicln("cancel orders:", err)
+		log.Println("cancel orders:", err)
+		return err
 	}
 
 	log.Println("Cancel resp:", resp.Status)
