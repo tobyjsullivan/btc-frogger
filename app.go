@@ -117,26 +117,22 @@ func main() {
 		if ethDiff < 0 {
 			if err := sellEth(conn, 0-ethDiff); err != nil {
 				log.Println("sellEth:", err)
-				continue
 			}
 		}
 		if ltcDiff < 0 {
 			if err := sellLtc(conn, 0-ltcDiff); err != nil {
 				log.Println("sellLtc:", err)
-				continue
 			}
 		}
 		// Then buy any ETH or LTC
 		if ethDiff > 0 {
 			if err := buyEth(conn, ethDiff); err != nil {
 				log.Println("buyEth:", err)
-				continue
 			}
 		}
 		if ltcDiff > 0 {
 			if err := buyLtc(conn, ltcDiff); err != nil {
 				log.Println("buyLtc:", err)
-				continue
 			}
 		}
 	}
