@@ -75,8 +75,6 @@ func (r *SignedRequester) makeRequest(method string, urlStr string, body io.Read
 }
 
 func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Reader, signed bool) (*http.Response, error) {
-	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
-
 	parsedUrl, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
@@ -99,6 +97,8 @@ func (r *SignedRequester) doMakeRequest(method string, urlStr string, body io.Re
 	if err != nil {
 		return nil, err
 	}
+
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 
 	if signed {
 		secret, err := base64.StdEncoding.DecodeString(r.ApiSecretKey)

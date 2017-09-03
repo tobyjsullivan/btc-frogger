@@ -50,10 +50,11 @@ func (svc *BalanceSvc) loop(ctx context.Context) {
 	}
 }
 
-func (svc *BalanceSvc) updateBalances() {
+func (svc *BalanceSvc) updateBalances() error {
 	accounts, err := svc.conn.GetAccounts()
 	if err != nil {
-		log.Fatalln("getAccounts:", err)
+		log.Println("getAccounts:", err)
+		return err
 	}
 
 	for _, acct := range accounts {
