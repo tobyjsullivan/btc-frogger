@@ -60,4 +60,6 @@ func (svc *BalanceSvc) updateBalances() error {
 	for _, acct := range accounts {
 		svc.ntvBalances[acct.Currency] = acct.Balance
 	}
+	
+	return nil
 }
