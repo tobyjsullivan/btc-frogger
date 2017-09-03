@@ -30,15 +30,25 @@ func NewService(dweetThingName string) *ReportingSvc {
 	return svc
 }
 
-func (svc *ReportingSvc) ReportMetrics(totalAssets int64) {
-	go svc.sendReport(totalAssets)
+func (svc *ReportingSvc) ReportMetrics(totalAssets, ntvBtcBal, ntvEthBal, ntvLtcBal int64, ethRate, ltcRate float64) {
+	go svc.sendReport(totalAssets, ntvBtcBal, ntvEthBal, ntvLtcBal, ethRate, ltcRate)
 }
 
-func (svc *ReportingSvc) sendReport(totalAssets int64) {
+func (svc *ReportingSvc) sendReport(totalAssets, ntvBtcBal, ntvEthBal, ntvLtcBal int64, ethRate, ltcRate float64) {
 	dweetBody := struct{
 		TotalAssets float64 `json:"totalAssets"`
+		BtcBalance float64 `json:"btcBalance"`
+		EthBalance float64 `json:"ethBalance"`
+		LtcBalance float64 `json:"ltcBalance"`
+		EthRate float64 `json:"ethRate"`
+		LtcRate float64 `json:"ltcRate"`
 	}{
 		TotalAssets: float64(totalAssets) / float64(coinbase.AmountCoin),
+		BtcBalance: float64(ntvBtcBal) / float64(coinbase.AmountCoin),
+		EthBalance: float64(ntvEthBal) / float64(coinbase.AmountCoin),
+		LtcBalance: float64(ntvLtcBal) / float64(coinbase.AmountCoin),
+		EthRate: ethRate,
+		LtcRate: ltcRate,
 	}
 
 	var body bytes.Buffer

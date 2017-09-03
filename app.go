@@ -71,7 +71,11 @@ func main() {
 				log.Println("reporting assets:", err)
 				continue
 			}
-			reportingSvc.ReportMetrics(distro.totalAssets)
+			ethRate, _ := rateSvc.CurrentRate(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC)
+			ltcRate, _ := rateSvc.CurrentRate(coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC)
+
+			reportingSvc.ReportMetrics(distro.totalAssets, distro.ntvBtcBalance, distro.ntvEthBalance,
+				distro.ntvLtcBalance, ethRate, ltcRate)
 		}
 	}(rateSvc, balanceSvc)
 
