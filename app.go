@@ -13,6 +13,8 @@ import (
 	"github.com/tobyjsullivan/btc-frogger/orders"
 	"github.com/tobyjsullivan/btc-frogger/rates"
 	"github.com/tobyjsullivan/btc-frogger/spread"
+	"github.com/tobyjsullivan/btc-frogger/reporting"
+	"errors"
 )
 
 const (
@@ -24,6 +26,7 @@ var (
 	coinbaseAccessKey  = os.Getenv("COINBASE_API_ACCESS_KEY")
 	coinbaseSecretKey  = os.Getenv("COINBASE_API_SECRET_KEY")
 	coinbasePassphrase = os.Getenv("COINBASE_API_PASSPHRASE")
+	dweetThingName = os.Getenv("DWEET_THING_NAME")
 )
 
 func main() {
@@ -43,6 +46,9 @@ func main() {
 
 	ctx := context.Background()
 
+	log.Println("Building reporting service...")
+	reportingSvc := reporting.NewService(dweetThingName)
+
 	log.Println("Building balances service...")
 	balanceSvc := balances.NewService(ctx, conn)
 
@@ -56,6 +62,18 @@ func main() {
 	orderSvc := orders.NewService(ctx, conn, spreadSvc, dryRun)
 
 	log.Println("Services initialized.")
+
+	go func(rateSvc *rates.RateSvc, balanceSvc *balances.BalanceSvc){
+		ticker := time.Tick(2 * time.Second)
+		for range ticker {
+			distro, err := computeDistribution(rateSvc, balanceSvc)
+			if err != nil {
+				log.Println("reporting assets:", err)
+				continue
+			}
+			reportingSvc.ReportMetrics(distro.totalAssets)
+		}
+	}(rateSvc, balanceSvc)
 
 	// Run the cycle every tick
 	ticker := time.NewTicker(TICK_DURATION)
@@ -81,54 +99,23 @@ func main() {
 
 		log.Printf("Current rates: ETH/BTC - %.4f; LTC/BTC - %.4f\n", ethBtcRate, ltcBtcRate)
 
-		// Check balance
-		btcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_BTC)
-		if !ok {
-			log.Println("BTC balance unavailable.")
-			continue
-		}
-
-		ethNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_ETH)
-		if !ok {
-			log.Println("ETH balance unavailable.")
-			continue
-		}
-
-		ltcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_LTC)
-		if !ok {
-			log.Println("LTC balance unavailable.")
-			continue
-		}
-
-		log.Printf("Current Holdings: BTC: %s ETH: %s LTC: %s\n", fmtAmount(btcNtvBal), fmtAmount(ethNtvBal), fmtAmount(ltcNtvBal))
-
-		btcAssets := btcNtvBal
-		ethAssets, err := rateSvc.Convert(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC, ethNtvBal)
+		distro, err := computeDistribution(rateSvc, balanceSvc)
 		if err != nil {
-			log.Println("ETH-BTC convert:", err)
+			log.Println("compute total assets:", err)
 			continue
 		}
-		ltcAssets, err := rateSvc.Convert(coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC, ltcNtvBal)
-		if err != nil {
-			log.Println("LTC-BTC convert:", err)
-			continue
-		}
+		log.Printf("Current Holdings: BTC: %s ETH: %s LTC: %s\n", fmtAmount(distro.ntvBtcBalance),
+			fmtAmount(distro.ntvEthBalance), fmtAmount(distro.ntvLtcBalance))
+		log.Printf("Total Assets: %s BTC - %s\n", fmtAmount(distro.totalAssets), time.Now())
 
-		totalAssets := btcAssets + ethAssets + ltcAssets
-		log.Printf("Total Assets: %s BTC - %s\n", fmtAmount(totalAssets), time.Now())
 
-		idealDistribution := totalAssets / 3
-
-		ethDiff := idealDistribution - ethAssets
-		ltcDiff := idealDistribution - ltcAssets
-
-		ntvEthDiff, err := rateSvc.Convert(coinbase.CURRENCY_BTC, coinbase.CURRENCY_ETH, ethDiff)
+		ntvEthDiff, err := rateSvc.Convert(coinbase.CURRENCY_BTC, coinbase.CURRENCY_ETH, distro.diffEth)
 		if err != nil {
 			log.Println("BTC-ETH convert:", err)
 			continue
 		}
 
-		ntvLtcDiff, err := rateSvc.Convert(coinbase.CURRENCY_BTC, coinbase.CURRENCY_LTC, ltcDiff)
+		ntvLtcDiff, err := rateSvc.Convert(coinbase.CURRENCY_BTC, coinbase.CURRENCY_LTC, distro.diffLtc)
 		if err != nil {
 			log.Println("BTC-LTC convert:", err)
 			continue
@@ -155,14 +142,14 @@ func main() {
 		if ntvEthDiff < 0 {
 			orderSvc.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideSell, 0-ntvEthDiff)
 		}
-		if ltcDiff < 0 {
+		if ntvLtcDiff < 0 {
 			orderSvc.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideSell, 0-ntvLtcDiff)
 		}
 		// Then buy any ETH or LTC
-		if ethDiff > 0 {
+		if ntvEthDiff > 0 {
 			orderSvc.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideBuy, ntvEthDiff)
 		}
-		if ltcDiff > 0 {
+		if ntvLtcDiff > 0 {
 			orderSvc.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideBuy, ntvLtcDiff)
 		}
 	}
@@ -172,4 +159,65 @@ func main() {
 
 func fmtAmount(amount int64) string {
 	return fmt.Sprintf("%.8f", float64(amount)/coinbase.AmountCoin)
+}
+
+type distribution struct {
+	totalAssets int64
+	ntvBtcBalance int64
+	ntvEthBalance int64
+	ntvLtcBalance int64
+	curBtcAssets int64
+	curEthAssets int64
+	curLtcAssets int64
+	diffEth int64
+	diffLtc int64
+}
+
+func computeDistribution(rateSvc *rates.RateSvc, balanceSvc *balances.BalanceSvc) (*distribution, error) {
+	// Check balance
+	btcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_BTC)
+	if !ok {
+		return nil, errors.New("BTC balance unavailable.")
+	}
+
+	ethNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_ETH)
+	if !ok {
+		return nil, errors.New("ETH balance unavailable.")
+	}
+
+	ltcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_LTC)
+	if !ok {
+		return nil, errors.New("LTC balance unavailable.")
+	}
+
+	btcAssets := btcNtvBal
+	ethAssets, err := rateSvc.Convert(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC, ethNtvBal)
+	if err != nil {
+		log.Println("ETH-BTC convert:", err)
+		return nil, err
+	}
+	ltcAssets, err := rateSvc.Convert(coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC, ltcNtvBal)
+	if err != nil {
+		log.Println("LTC-BTC convert:", err)
+		return nil, err
+	}
+
+	totalAssets := btcAssets + ethAssets + ltcAssets
+
+	idealDistribution := totalAssets / 3
+
+	ethDiff := idealDistribution - ethAssets
+	ltcDiff := idealDistribution - ltcAssets
+
+	return &distribution{
+		totalAssets: totalAssets,
+		ntvBtcBalance: btcNtvBal,
+		ntvEthBalance: ethNtvBal,
+		ntvLtcBalance: ltcNtvBal,
+		curBtcAssets: btcAssets,
+		curEthAssets: ethAssets,
+		curLtcAssets: ltcAssets,
+		diffEth: ethDiff,
+		diffLtc: ltcDiff,
+	}, nil
 }
