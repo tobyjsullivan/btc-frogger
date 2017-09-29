@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	TICK_DURATION = 1 * time.Hour
+	TICK_DURATION = 12 * time.Hour
 )
 
 var (
