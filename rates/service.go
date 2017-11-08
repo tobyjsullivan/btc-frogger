@@ -36,18 +36,24 @@ func (svc *RateSvc) CurrentRate(from, to coinbase.Currency) (float64, bool) {
 	var prodId coinbase.ProductID
 	var invert bool
 
-	if from == coinbase.CURRENCY_BTC && to == coinbase.CURRENCY_ETH {
-		prodId = coinbase.ProductID_ETH_BTC
+	if from == coinbase.CurrencyBtc && to == coinbase.CurrencyEth {
+		prodId = coinbase.ProductEthBtc
 		invert = true
-	} else if from == coinbase.CURRENCY_ETH && to == coinbase.CURRENCY_BTC {
-		prodId = coinbase.ProductID_ETH_BTC
+	} else if from == coinbase.CurrencyEth && to == coinbase.CurrencyBtc {
+		prodId = coinbase.ProductEthBtc
 		invert = false
-	} else if from == coinbase.CURRENCY_BTC && to == coinbase.CURRENCY_LTC {
-		prodId = coinbase.ProductID_LTC_BTC
+	} else if from == coinbase.CurrencyBtc && to == coinbase.CurrencyLtc {
+		prodId = coinbase.ProductLtcBtc
 		invert = true
-	} else if from == coinbase.CURRENCY_LTC && to == coinbase.CURRENCY_BTC {
-		prodId = coinbase.ProductID_LTC_BTC
+	} else if from == coinbase.CurrencyLtc && to == coinbase.CurrencyBtc {
+		prodId = coinbase.ProductLtcBtc
 		invert = false
+	} else if from == coinbase.CurrencyBtc && to == coinbase.CurrencyUsd {
+		prodId = coinbase.ProductBtcUsd
+		invert = false
+	} else if from == coinbase.CurrencyUsd && to == coinbase.CurrencyBtc {
+		prodId = coinbase.ProductBtcUsd
+		invert = true
 	} else {
 		return 0, false
 	}
@@ -88,7 +94,11 @@ func (svc *RateSvc) loop(ctx context.Context) {
 }
 
 func (svc *RateSvc) updateRates() {
-	ratesToGet := []coinbase.ProductID{coinbase.ProductID_ETH_BTC, coinbase.ProductID_LTC_BTC}
+	ratesToGet := []coinbase.ProductID{
+		coinbase.ProductEthBtc,
+		coinbase.ProductLtcBtc,
+		coinbase.ProductBtcUsd,
+	}
 
 	for _, prodId := range ratesToGet {
 		ticker, err := svc.conn.CurrentTicker(prodId)

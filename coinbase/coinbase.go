@@ -17,17 +17,19 @@ import (
 )
 
 const (
-	API_BASE_URL = "https://api.gdax.com"
+	gdaxApiBaseUrl = "https://api.gdax.com"
 
-	MAX_RETRIES = 1
-	RETRY_DELAY = 60 * time.Second
+	maxRequestRetries = 1
+	requestRetryDelay = 60 * time.Second
 
-	ProductID_ETH_BTC = ProductID("ETH-BTC")
-	ProductID_LTC_BTC = ProductID("LTC-BTC")
+	ProductEthBtc = ProductID("ETH-BTC")
+	ProductLtcBtc = ProductID("LTC-BTC")
+	ProductBtcUsd = ProductID("BTC-USD")
 
-	CURRENCY_ETH = Currency("ETH")
-	CURRENCY_BTC = Currency("BTC")
-	CURRENCY_LTC = Currency("LTC")
+	CurrencyEth = Currency("ETH")
+	CurrencyBtc = Currency("BTC")
+	CurrencyLtc = Currency("LTC")
+	CurrencyUsd = Currency("USD")
 
 	QuoteIncrement = 1000
 )
@@ -42,7 +44,7 @@ type SignedRequester struct {
 }
 
 func getEndpointUrl(path string) string {
-	u, err := url.Parse(API_BASE_URL)
+	u, err := url.Parse(gdaxApiBaseUrl)
 	if err != nil {
 		log.Panicln("url.Parse:", err)
 	}
@@ -53,10 +55,10 @@ func (r *SignedRequester) makeRequest(method string, urlStr string, body io.Read
 	success := false
 	tries := 0
 	var err error
-	for !success && tries < MAX_RETRIES {
+	for !success && tries < maxRequestRetries {
 		if tries > 0 {
 			log.Println("Sleeping before retry...")
-			time.Sleep(RETRY_DELAY + time.Duration(rand.Intn(2000))*time.Millisecond)
+			time.Sleep(requestRetryDelay + time.Duration(rand.Intn(2000))*time.Millisecond)
 			log.Println("Retrying...")
 		}
 

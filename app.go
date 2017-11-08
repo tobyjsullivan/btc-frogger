@@ -15,6 +15,7 @@ import (
 	"github.com/tobyjsullivan/btc-frogger/spread"
 	"github.com/tobyjsullivan/btc-frogger/reporting"
 	"errors"
+	"math"
 )
 
 const (
@@ -71,11 +72,21 @@ func main() {
 				log.Println("reporting assets:", err)
 				continue
 			}
-			ethRate, _ := rateSvc.CurrentRate(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC)
-			ltcRate, _ := rateSvc.CurrentRate(coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC)
+			ethRate, _ := rateSvc.CurrentRate(coinbase.CurrencyEth, coinbase.CurrencyBtc)
+			ltcRate, _ := rateSvc.CurrentRate(coinbase.CurrencyLtc, coinbase.CurrencyBtc)
+			usdRate, _ := rateSvc.CurrentRate(coinbase.CurrencyBtc, coinbase.CurrencyUsd)
 
-			reportingSvc.ReportMetrics(distro.totalAssets, distro.ntvBtcBalance, distro.ntvEthBalance,
-				distro.ntvLtcBalance, ethRate, ltcRate)
+			totalAssets := float64(distro.totalAssets) / float64(coinbase.AmountCoin)
+			reportingSvc.ReportMetrics(&reporting.Report{
+				TotalAssets: totalAssets,
+				AssetValueUsd: math.Floor((totalAssets * usdRate) * 100) / 100,
+				BtcBalance: float64(distro.ntvBtcBalance) / float64(coinbase.AmountCoin),
+				EthBalance: float64(distro.ntvEthBalance) / float64(coinbase.AmountCoin),
+				LtcBalance: float64(distro.ntvLtcBalance) / float64(coinbase.AmountCoin),
+				EthRate: ethRate,
+				LtcRate: ltcRate,
+				UsdRate: usdRate,
+			})
 		}
 	}(rateSvc, balanceSvc)
 
@@ -89,13 +100,13 @@ func main() {
 			conn.CancelAllOrders()
 		}
 
-		ethBtcRate, ok := rateSvc.CurrentRate(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC)
+		ethBtcRate, ok := rateSvc.CurrentRate(coinbase.CurrencyEth, coinbase.CurrencyBtc)
 		if !ok {
 			log.Println("ETH/BTC rate not available")
 			continue
 		}
 
-		ltcBtcRate, ok := rateSvc.CurrentRate(coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC)
+		ltcBtcRate, ok := rateSvc.CurrentRate(coinbase.CurrencyLtc, coinbase.CurrencyBtc)
 		if !ok {
 			log.Println("LTC/BTC rate not available")
 			continue
@@ -113,13 +124,13 @@ func main() {
 		log.Printf("Total Assets: %s BTC - %s\n", fmtAmount(distro.totalAssets), time.Now())
 
 
-		ntvEthDiff, err := rateSvc.Convert(coinbase.CURRENCY_BTC, coinbase.CURRENCY_ETH, distro.diffEth)
+		ntvEthDiff, err := rateSvc.Convert(coinbase.CurrencyBtc, coinbase.CurrencyEth, distro.diffEth)
 		if err != nil {
 			log.Println("BTC-ETH convert:", err)
 			continue
 		}
 
-		ntvLtcDiff, err := rateSvc.Convert(coinbase.CURRENCY_BTC, coinbase.CURRENCY_LTC, distro.diffLtc)
+		ntvLtcDiff, err := rateSvc.Convert(coinbase.CurrencyBtc, coinbase.CurrencyLtc, distro.diffLtc)
 		if err != nil {
 			log.Println("BTC-LTC convert:", err)
 			continue
@@ -127,10 +138,10 @@ func main() {
 
 		log.Printf("Trade Goals: %s ETH; %s LTC\n", fmtAmount(ntvEthDiff), fmtAmount(ntvLtcDiff))
 
-		ethBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_ETH_BTC)
-		ethAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_ETH_BTC)
-		ltcBid, _ := spreadSvc.CurrentBid(coinbase.ProductID_LTC_BTC)
-		ltcAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductID_LTC_BTC)
+		ethBid, _ := spreadSvc.CurrentBid(coinbase.ProductEthBtc)
+		ethAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductEthBtc)
+		ltcBid, _ := spreadSvc.CurrentBid(coinbase.ProductLtcBtc)
+		ltcAsk, _ := spreadSvc.CurrentAsk(coinbase.ProductLtcBtc)
 		log.Printf("Current spreads: ETH/BTC - %d:%d; LTC/BTC - %d:%d\n", ethBid, ethAsk, ltcBid, ltcAsk)
 
 		// There are six potential cases
@@ -144,17 +155,17 @@ func main() {
 		// NOTE: Since BTC is the intermediary currency, we never actually have to buy or sell it explicitly
 		// Sell any ETH or LTC first
 		if ntvEthDiff < 0 {
-			orderSvc.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideSell, 0-ntvEthDiff)
+			orderSvc.PlaceOrder(coinbase.CurrencyEth, coinbase.SideSell, 0-ntvEthDiff)
 		}
 		if ntvLtcDiff < 0 {
-			orderSvc.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideSell, 0-ntvLtcDiff)
+			orderSvc.PlaceOrder(coinbase.CurrencyLtc, coinbase.SideSell, 0-ntvLtcDiff)
 		}
 		// Then buy any ETH or LTC
 		if ntvEthDiff > 0 {
-			orderSvc.PlaceOrder(coinbase.CURRENCY_ETH, coinbase.SideBuy, ntvEthDiff)
+			orderSvc.PlaceOrder(coinbase.CurrencyEth, coinbase.SideBuy, ntvEthDiff)
 		}
 		if ntvLtcDiff > 0 {
-			orderSvc.PlaceOrder(coinbase.CURRENCY_LTC, coinbase.SideBuy, ntvLtcDiff)
+			orderSvc.PlaceOrder(coinbase.CurrencyLtc, coinbase.SideBuy, ntvLtcDiff)
 		}
 	}
 
@@ -179,28 +190,28 @@ type distribution struct {
 
 func computeDistribution(rateSvc *rates.RateSvc, balanceSvc *balances.BalanceSvc) (*distribution, error) {
 	// Check balance
-	btcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_BTC)
+	btcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CurrencyBtc)
 	if !ok {
 		return nil, errors.New("BTC balance unavailable.")
 	}
 
-	ethNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_ETH)
+	ethNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CurrencyEth)
 	if !ok {
 		return nil, errors.New("ETH balance unavailable.")
 	}
 
-	ltcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CURRENCY_LTC)
+	ltcNtvBal, ok := balanceSvc.GetNativeBalance(coinbase.CurrencyLtc)
 	if !ok {
 		return nil, errors.New("LTC balance unavailable.")
 	}
 
 	btcAssets := btcNtvBal
-	ethAssets, err := rateSvc.Convert(coinbase.CURRENCY_ETH, coinbase.CURRENCY_BTC, ethNtvBal)
+	ethAssets, err := rateSvc.Convert(coinbase.CurrencyEth, coinbase.CurrencyBtc, ethNtvBal)
 	if err != nil {
 		log.Println("ETH-BTC convert:", err)
 		return nil, err
 	}
-	ltcAssets, err := rateSvc.Convert(coinbase.CURRENCY_LTC, coinbase.CURRENCY_BTC, ltcNtvBal)
+	ltcAssets, err := rateSvc.Convert(coinbase.CurrencyLtc, coinbase.CurrencyBtc, ltcNtvBal)
 	if err != nil {
 		log.Println("LTC-BTC convert:", err)
 		return nil, err

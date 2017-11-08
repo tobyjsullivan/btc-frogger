@@ -51,8 +51,8 @@ type orderReq struct {
 
 func (svc *OrderSvc) loop(ctx context.Context) {
 	mSpreadIndex := map[coinbase.Currency]coinbase.ProductID{
-		coinbase.CURRENCY_ETH: coinbase.ProductID_ETH_BTC,
-		coinbase.CURRENCY_LTC: coinbase.ProductID_LTC_BTC,
+		coinbase.CurrencyEth: coinbase.ProductEthBtc,
+		coinbase.CurrencyLtc: coinbase.ProductLtcBtc,
 	}
 
 	for {

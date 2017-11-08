@@ -21,10 +21,10 @@ func (conn *Conn) PlaceOrder(c Currency, side OrderSide, amountNative int64, pri
 
 	var productId ProductID
 	switch c {
-	case CURRENCY_ETH:
-		productId = ProductID_ETH_BTC
-	case CURRENCY_LTC:
-		productId = ProductID_LTC_BTC
+	case CurrencyEth:
+		productId = ProductEthBtc
+	case CurrencyLtc:
+		productId = ProductLtcBtc
 	default:
 		return errors.New(fmt.Sprintf("Unexpected currency: %s", c))
 	}

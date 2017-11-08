@@ -3,7 +3,6 @@ package reporting
 import (
 	"os"
 	"log"
-	"github.com/tobyjsullivan/btc-frogger/coinbase"
 	"net/url"
 	"fmt"
 	"net/http"
@@ -30,27 +29,22 @@ func NewService(dweetThingName string) *ReportingSvc {
 	return svc
 }
 
-func (svc *ReportingSvc) ReportMetrics(totalAssets, ntvBtcBal, ntvEthBal, ntvLtcBal int64, ethRate, ltcRate float64) {
-	go svc.sendReport(totalAssets, ntvBtcBal, ntvEthBal, ntvLtcBal, ethRate, ltcRate)
+type Report struct {
+	TotalAssets float64 `json:"totalAssets"`
+	AssetValueUsd float64 `json:"assetValueUsd"`
+	BtcBalance float64 `json:"btcBalance"`
+	EthBalance float64 `json:"ethBalance"`
+	LtcBalance float64 `json:"ltcBalance"`
+	EthRate float64 `json:"ethRate"`
+	LtcRate float64 `json:"ltcRate"`
+	UsdRate float64 `json:"usdRate"`
 }
 
-func (svc *ReportingSvc) sendReport(totalAssets, ntvBtcBal, ntvEthBal, ntvLtcBal int64, ethRate, ltcRate float64) {
-	dweetBody := struct{
-		TotalAssets float64 `json:"totalAssets"`
-		BtcBalance float64 `json:"btcBalance"`
-		EthBalance float64 `json:"ethBalance"`
-		LtcBalance float64 `json:"ltcBalance"`
-		EthRate float64 `json:"ethRate"`
-		LtcRate float64 `json:"ltcRate"`
-	}{
-		TotalAssets: float64(totalAssets) / float64(coinbase.AmountCoin),
-		BtcBalance: float64(ntvBtcBal) / float64(coinbase.AmountCoin),
-		EthBalance: float64(ntvEthBal) / float64(coinbase.AmountCoin),
-		LtcBalance: float64(ntvLtcBal) / float64(coinbase.AmountCoin),
-		EthRate: ethRate,
-		LtcRate: ltcRate,
-	}
+func (svc *ReportingSvc) ReportMetrics(report *Report) {
+	go svc.sendReport(report)
+}
 
+func (svc *ReportingSvc) sendReport(dweetBody *Report) {
 	var body bytes.Buffer
 	encoder := json.NewEncoder(&body)
 	if err := encoder.Encode(&dweetBody); err != nil {
@@ -58,6 +52,7 @@ func (svc *ReportingSvc) sendReport(totalAssets, ntvBtcBal, ntvEthBal, ntvLtcBal
 		return
 	}
 
+	svc.logger.Printf("Metrics sent to %s", svc.dweetThingName)
 	endpointUrl := dweetEndpointUrl(fmt.Sprintf("/dweet/quietly/for/%s", svc.dweetThingName), svc.logger)
 
 	_, err := http.Post(endpointUrl, "application/json", &body)

@@ -68,7 +68,7 @@ func (svc *SpreadSvc) loop(ctx context.Context) {
 }
 
 func (svc *SpreadSvc) updateSpreads() {
-	ratesToGet := []coinbase.ProductID{coinbase.ProductID_ETH_BTC, coinbase.ProductID_LTC_BTC}
+	ratesToGet := []coinbase.ProductID{coinbase.ProductEthBtc, coinbase.ProductLtcBtc}
 
 	for _, prodId := range ratesToGet {
 		book, err := svc.conn.CurrentBook(prodId)
