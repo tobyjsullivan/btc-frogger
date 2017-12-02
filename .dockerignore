@@ -2,4 +2,6 @@
 *.iml
 .idea
 .git
+*.swp
+docker-compose.yml
 
