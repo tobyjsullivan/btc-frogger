@@ -1,0 +1,11 @@
+version: '3'
+services:
+  btc-frogger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DRY_RUN: "true"
+      DWEET_THING_NAME: "759d42a3-b362-461b-9dd0-c783f42589b5"
+    env_file: .env
+

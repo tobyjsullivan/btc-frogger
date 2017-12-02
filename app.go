@@ -48,7 +48,7 @@ func main() {
 	ctx := context.Background()
 
 	log.Println("Building reporting service...")
-	reportingSvc := reporting.NewService(dweetThingName)
+	reportingSvc := reporting.NewService(dweetThingName, dryRun)
 
 	log.Println("Building balances service...")
 	balanceSvc := balances.NewService(ctx, conn)

@@ -17,12 +17,14 @@ const (
 
 type ReportingSvc struct {
 	dweetThingName string
+	dryRun bool
 	logger *log.Logger
 }
 
-func NewService(dweetThingName string) *ReportingSvc {
+func NewService(dweetThingName string, dryRun bool) *ReportingSvc {
 	svc := &ReportingSvc{
 		dweetThingName: dweetThingName,
+		dryRun: dryRun,
 		logger: log.New(os.Stdout, "[reporting] ", 0),
 	}
 
@@ -45,6 +47,11 @@ func (svc *ReportingSvc) ReportMetrics(report *Report) {
 }
 
 func (svc *ReportingSvc) sendReport(dweetBody *Report) {
+	if svc.dryRun {
+		svc.logger.Println("DRY_RUN: skipping metrics report")
+		return
+	}
+
 	var body bytes.Buffer
 	encoder := json.NewEncoder(&body)
 	if err := encoder.Encode(&dweetBody); err != nil {
