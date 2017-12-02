@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	TICK_DURATION = 10 * time.Second
+	TICK_DURATION = 30 * time.Second
 )
 
 var (
@@ -65,7 +65,7 @@ func main() {
 	log.Println("Services initialized.")
 
 	go func(rateSvc *rates.RateSvc, balanceSvc *balances.BalanceSvc){
-		ticker := time.Tick(2 * time.Second)
+		ticker := time.Tick(10 * time.Second)
 		for range ticker {
 			distro, err := computeDistribution(rateSvc, balanceSvc)
 			if err != nil {

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	loopDuration = 1 * time.Second
+	loopDuration = 3 * time.Second
 )
 
 type BalanceSvc struct {
