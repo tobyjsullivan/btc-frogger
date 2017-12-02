@@ -218,11 +218,27 @@ func computeDistribution(rateSvc *rates.RateSvc, balanceSvc *balances.BalanceSvc
 	}
 
 	totalAssets := btcAssets + ethAssets + ltcAssets
+	ethBtcRate, _ := rateSvc.CurrentRate(coinbase.CurrencyEth, coinbase.CurrencyBtc)
+	ltcBtcRate, _ := rateSvc.CurrentRate(coinbase.CurrencyLtc, coinbase.CurrencyBtc)
 
-	idealDistribution := totalAssets / 3
+	log.Println("computeDistribution: totalAssets", totalAssets)
 
-	ethDiff := idealDistribution - ethAssets
-	ltcDiff := idealDistribution - ltcAssets
+	btcCap := bitcoinMarketcap()
+	ethCap := ethereumMarketcap(ethBtcRate)
+	ltcCap := litecoinMarketcap(ltcBtcRate)
+
+	totalCap := btcCap + ethCap + ltcCap
+
+	ethProportion := ethCap / totalCap
+	ltcProportion := ltcCap / totalCap
+
+	targetEth := int64(float64(totalAssets) * ethProportion)
+	targetLtc := int64(float64(totalAssets) * ltcProportion)
+
+	//idealDistribution := totalAssets / 3
+
+	ethDiff := targetEth - ethAssets
+	ltcDiff := targetLtc - ltcAssets
 
 	return &distribution{
 		totalAssets: totalAssets,
@@ -235,4 +251,17 @@ func computeDistribution(rateSvc *rates.RateSvc, balanceSvc *balances.BalanceSvc
 		diffEth: ethDiff,
 		diffLtc: ltcDiff,
 	}, nil
+}
+
+func bitcoinMarketcap() float64 {
+	return 21000000.0
+}
+
+func ethereumMarketcap(ethBtcRate float64) float64 {
+	// A rough approximation
+	return 100000000.0 * ethBtcRate
+}
+
+func litecoinMarketcap(ltcBtcRate float64) float64 {
+	return 84000000.0 * ltcBtcRate
 }
